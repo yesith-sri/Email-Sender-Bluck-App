@@ -97,9 +97,9 @@ const ALLOWED_ATTACHMENT_TYPES = [
 ];
 
 function sanitizeInput(input: string): string {
+  if (!input || typeof input !== 'string') return '';
   return input
     .replace(/[<>'"&]/g, '')
-    .trim()
     .slice(0, MAX_MESSAGE_LENGTH);
 }
 
@@ -125,7 +125,6 @@ export default function BulkEmailSender() {
   const [certPreviewName, setCertPreviewName] = useState<string>('John Doe');
   const [namePosition, setNamePosition] = useState<{x: number, y: number} | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(true);
   const [selectingPosition, setSelectingPosition] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const certImageRef = useRef<HTMLImageElement>(null);
@@ -298,42 +297,48 @@ export default function BulkEmailSender() {
   };
 
   const handlePaste = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const content = e.target.value;
-    const lines = content.split(/[\n]/).filter(line => line.trim());
-    
-    const parsed: Recipient[] = [];
-    const emailList: string[] = [];
+    try {
+      const content = e.target.value;
+      if (!content) return;
+      
+      const lines = content.split(/[\n]/).filter(line => line.trim());
+      
+      const parsed: Recipient[] = [];
+      const emailList: string[] = [];
 
-    lines.forEach(line => {
-      const parts = line.split(',').map(p => p.trim());
-      if (parts.length >= 2 && validateEmail(parts[0])) {
-        parsed.push({ email: parts[0].toLowerCase(), name: sanitizeInput(parts[1]) });
-        emailList.push(parts[0].toLowerCase());
-      } else if (validateEmail(line.trim())) {
-        parsed.push({ email: line.trim().toLowerCase(), name: '' });
-        emailList.push(line.trim().toLowerCase());
+      lines.forEach(line => {
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length >= 2 && validateEmail(parts[0])) {
+          parsed.push({ email: parts[0].toLowerCase(), name: sanitizeInput(parts[1]) });
+          emailList.push(parts[0].toLowerCase());
+        } else if (validateEmail(line.trim())) {
+          parsed.push({ email: line.trim().toLowerCase(), name: '' });
+          emailList.push(line.trim().toLowerCase());
+        }
+      });
+
+      if (parsed.length === 0) {
+        setError('recipients', 'No valid emails found');
+        setRecipients([]);
+        setEmails([]);
+        return;
       }
-    });
-
-    if (parsed.length === 0) {
-      setError('recipients', 'No valid emails found');
-      setRecipients([]);
-      setEmails([]);
-      return;
+      if (parsed.length > MAX_RECIPIENTS) {
+        setError('recipients', `Too many recipients. Max ${MAX_RECIPIENTS} allowed`);
+        setRecipients(parsed.slice(0, MAX_RECIPIENTS));
+        setEmails(emailList.slice(0, MAX_RECIPIENTS));
+        return;
+      }
+      clearError('recipients');
+      setRecipients(parsed);
+      setEmails(emailList);
+    } catch (err) {
+      console.error('Paste error:', err);
     }
-    if (parsed.length > MAX_RECIPIENTS) {
-      setError('recipients', `Too many recipients. Max ${MAX_RECIPIENTS} allowed`);
-      setRecipients(parsed.slice(0, MAX_RECIPIENTS));
-      setEmails(emailList.slice(0, MAX_RECIPIENTS));
-      return;
-    }
-    clearError('recipients');
-    setRecipients(parsed);
-    setEmails(emailList);
   };
 
   const handleSubjectChange = (value: string) => {
-    const sanitized = sanitizeInput(value).slice(0, MAX_SUBJECT_LENGTH);
+    const sanitized = value.replace(/[<>'"&]/g, '').slice(0, MAX_SUBJECT_LENGTH);
     setSubject(sanitized);
     if (sanitized.length >= MAX_SUBJECT_LENGTH) {
       setError('subject', `Max ${MAX_SUBJECT_LENGTH} characters allowed`);
@@ -485,8 +490,10 @@ export default function BulkEmailSender() {
     try {
       const emailResults: Result[] = [];
 
-      for (let i = 0; i < recipients.length; i++) {
-        const recipient = recipients[i];
+      const emailList = emailType === 'certificate' ? recipients : emails.map(e => ({ email: e, name: '' }));
+
+      for (let i = 0; i < emailList.length; i++) {
+        const recipient = emailList[i];
         
         try {
           let certDataUrl = null;
@@ -504,20 +511,22 @@ export default function BulkEmailSender() {
               type: emailType,
               certificate: certDataUrl,
               recipientName: recipient.name,
-              demoMode: isDemoMode,
               attachments: emailType === 'invitation' ? attachments : []
             })
           });
 
           const data = await response.json();
           
-          if (data.results && data.results[0]) {
+          if (!response.ok || data.error) {
+            console.error('API error:', data.error);
+            emailResults.push({ email: recipient.email, success: false, error: data.error || 'Failed to send' });
+          } else if (data.results && data.results[0]) {
             emailResults.push(data.results[0]);
           } else {
             emailResults.push({ email: recipient.email, success: true });
           }
 
-          if (i < recipients.length - 1) {
+          if (i < emailList.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
 
@@ -556,28 +565,7 @@ export default function BulkEmailSender() {
             <p className="text-slate-400 text-sm mt-1">Send emails with attachments</p>
           </div>
           
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-xs">{isDemoMode ? 'Demo' : 'Live'}</span>
-            <button
-              onClick={() => setIsDemoMode(!isDemoMode)}
-              className={`w-10 h-5 rounded-full transition-colors relative ${
-                isDemoMode ? 'bg-amber-500' : 'bg-slate-600'
-              }`}
-            >
-              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                isDemoMode ? 'left-5' : 'left-0.5'
-              }`} />
-            </button>
           </div>
-        </div>
-
-        {isDemoMode && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-6">
-            <p className="text-amber-400 text-sm text-center">
-              Demo mode - Add RESEND_API_KEY for real sending
-            </p>
-          </div>
-        )}
 
         <div className="flex gap-2 mb-6">
           <button
@@ -966,12 +954,10 @@ export default function BulkEmailSender() {
         )}
         <button
           onClick={sendEmails}
-          disabled={sending || emails.length === 0}
+          disabled={sending || (emailType === 'certificate' ? recipients.length === 0 : emails.length === 0)}
           className={`w-full py-3.5 rounded-xl text-white font-medium text-sm transition-all flex items-center justify-center gap-2 ${
             sending || emails.length === 0
               ? 'bg-slate-700 cursor-not-allowed'
-              : isDemoMode
-              ? 'bg-amber-600 hover:bg-amber-700'
               : emailType === 'certificate'
               ? 'bg-pink-600 hover:bg-pink-700'
               : 'bg-blue-600 hover:bg-blue-700'
@@ -988,7 +974,7 @@ export default function BulkEmailSender() {
           ) : (
             <>
               <SendIcon />
-              {isDemoMode ? 'Simulate Send' : 'Send'} {emailType === 'certificate' ? 'Certificates' : 'Invitations'} ({emails.length})
+              Send {emailType === 'certificate' ? 'Certificates' : 'Invitations'} ({emails.length})
             </>
           )}
         </button>
