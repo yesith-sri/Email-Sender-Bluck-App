@@ -1,65 +1,1026 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useRef } from 'react';
+
+type EmailType = 'invitation' | 'certificate';
+type Result = {
+  email: string;
+  success: boolean;
+  error?: string;
+};
+
+interface Recipient {
+  email: string;
+  name: string;
+}
+
+interface Attachment {
+  name: string;
+  type: string;
+  data: string;
+  size: number;
+}
+
+const SendIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+  </svg>
+);
+
+const UploadIcon = () => (
+  <svg className="w-12 h-12 mx-auto text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+  </svg>
+);
+
+const MailIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+);
+
+const CertificateIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+const XIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const DemoIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+  </svg>
+);
+
+const PaperclipIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+  </svg>
+);
+
+const FileIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const MAX_SUBJECT_LENGTH = 200;
+const MAX_MESSAGE_LENGTH = 5000;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENTS = 10;
+const MAX_RECIPIENTS = 1000;
+const ALLOWED_ATTACHMENT_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
+  'application/zip',
+];
+
+function sanitizeInput(input: string): string {
+  return input
+    .replace(/[<>'"&]/g, '')
+    .trim()
+    .slice(0, MAX_MESSAGE_LENGTH);
+}
+
+function sanitizeFilename(filename: string): string {
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 255);
+}
+
+function validateEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email.trim());
+}
+
+export default function BulkEmailSender() {
+  const [emailType, setEmailType] = useState<EmailType>('invitation');
+  const [emails, setEmails] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [subject, setSubject] = useState('');
+  const [customMessage, setCustomMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [results, setResults] = useState<Result[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [certTemplate, setCertTemplate] = useState<string | null>(null);
+  const [certPreview, setCertPreview] = useState<string | null>(null);
+  const [certPreviewName, setCertPreviewName] = useState<string>('John Doe');
+  const [namePosition, setNamePosition] = useState<{x: number, y: number} | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [selectingPosition, setSelectingPosition] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const certImageRef = useRef<HTMLImageElement>(null);
+  const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const setError = (field: string, message: string) => {
+    setErrors(prev => ({ ...prev, [field]: message }));
+  };
+
+  const clearError = (field: string) => {
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      setError('fileUpload', `File too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+      return;
+    }
+    clearError('fileUpload');
+
+    if (emailType === 'certificate') {
+      if (!file.type.startsWith('image/')) {
+        setError('certTemplate', 'Only image files allowed for certificate template');
+        return;
+      }
+      clearError('certTemplate');
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCertTemplate(event.target?.result as string);
+        setCertPreview(event.target?.result as string);
+        setNamePosition(null);
+        setCertPreviewName('John Doe');
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        const lines = content.split(/\r?\n/).filter(line => line.trim());
+        const validEmails = lines
+          .map(line => line.trim())
+          .filter(line => validateEmail(line));
+        
+        if (validEmails.length === 0) {
+          setError('fileUpload', 'No valid emails found in file');
+          setEmails([]);
+          return;
+        }
+        if (validEmails.length > MAX_RECIPIENTS) {
+          setError('fileUpload', `Too many emails. Max ${MAX_RECIPIENTS} allowed`);
+          setEmails(validEmails.slice(0, MAX_RECIPIENTS));
+          return;
+        }
+        clearError('fileUpload');
+        setEmails(validEmails);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const handleAttachmentUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    if (attachments.length + files.length > MAX_TOTAL_ATTACHMENTS) {
+      setError('attachments', `Max ${MAX_TOTAL_ATTACHMENTS} files allowed`);
+      return;
+    }
+
+    const newAttachments: Attachment[] = [];
+    let hasError = false;
+
+    Array.from(files).forEach((file) => {
+      if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+        setError('attachments', `File type not allowed: ${file.name}`);
+        hasError = true;
+        return;
+      }
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        setError('attachments', `File too large: ${file.name} (max ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB)`);
+        hasError = true;
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        newAttachments.push({
+          name: sanitizeFilename(file.name),
+          type: file.type,
+          data: base64,
+          size: file.size,
+        });
+        if (newAttachments.length === Array.from(files).filter(f => 
+          ALLOWED_ATTACHMENT_TYPES.includes(f.type) && f.size <= MAX_ATTACHMENT_SIZE
+        ).length) {
+          setAttachments(prev => [...prev, ...newAttachments]);
+          clearError('attachments');
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+    if (attachments.length === 1) clearError('attachments');
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      setError('fileUpload', `File too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const lines = content.split(/\r?\n/).filter(line => line.trim());
+      
+      const parsed: Recipient[] = [];
+      const emailList: string[] = [];
+
+      lines.forEach(line => {
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length >= 2 && validateEmail(parts[0])) {
+          parsed.push({ email: parts[0].toLowerCase(), name: sanitizeInput(parts[1]) });
+          emailList.push(parts[0].toLowerCase());
+        } else if (validateEmail(line.trim())) {
+          parsed.push({ email: line.trim().toLowerCase(), name: '' });
+          emailList.push(line.trim().toLowerCase());
+        }
+      });
+
+      if (parsed.length === 0) {
+        setError('fileUpload', 'No valid emails found. Format: email,name');
+        setRecipients([]);
+        setEmails([]);
+        return;
+      }
+      if (parsed.length > MAX_RECIPIENTS) {
+        setError('fileUpload', `Too many recipients. Max ${MAX_RECIPIENTS} allowed`);
+        setRecipients(parsed.slice(0, MAX_RECIPIENTS));
+        setEmails(emailList.slice(0, MAX_RECIPIENTS));
+        return;
+      }
+      clearError('fileUpload');
+      setRecipients(parsed);
+      setEmails(emailList);
+    };
+    reader.readAsText(file);
+  };
+
+  const handlePaste = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const content = e.target.value;
+    const lines = content.split(/[\n]/).filter(line => line.trim());
+    
+    const parsed: Recipient[] = [];
+    const emailList: string[] = [];
+
+    lines.forEach(line => {
+      const parts = line.split(',').map(p => p.trim());
+      if (parts.length >= 2 && validateEmail(parts[0])) {
+        parsed.push({ email: parts[0].toLowerCase(), name: sanitizeInput(parts[1]) });
+        emailList.push(parts[0].toLowerCase());
+      } else if (validateEmail(line.trim())) {
+        parsed.push({ email: line.trim().toLowerCase(), name: '' });
+        emailList.push(line.trim().toLowerCase());
+      }
+    });
+
+    if (parsed.length === 0) {
+      setError('recipients', 'No valid emails found');
+      setRecipients([]);
+      setEmails([]);
+      return;
+    }
+    if (parsed.length > MAX_RECIPIENTS) {
+      setError('recipients', `Too many recipients. Max ${MAX_RECIPIENTS} allowed`);
+      setRecipients(parsed.slice(0, MAX_RECIPIENTS));
+      setEmails(emailList.slice(0, MAX_RECIPIENTS));
+      return;
+    }
+    clearError('recipients');
+    setRecipients(parsed);
+    setEmails(emailList);
+  };
+
+  const handleSubjectChange = (value: string) => {
+    const sanitized = sanitizeInput(value).slice(0, MAX_SUBJECT_LENGTH);
+    setSubject(sanitized);
+    if (sanitized.length >= MAX_SUBJECT_LENGTH) {
+      setError('subject', `Max ${MAX_SUBJECT_LENGTH} characters allowed`);
+    } else {
+      clearError('subject');
+    }
+  };
+
+  const handleMessageChange = (value: string) => {
+    const sanitized = value.replace(/<script|javascript:|on\w+=/gi, '').slice(0, MAX_MESSAGE_LENGTH);
+    setCustomMessage(sanitized);
+    if (sanitized.length >= MAX_MESSAGE_LENGTH) {
+      setError('message', `Max ${MAX_MESSAGE_LENGTH} characters allowed`);
+    } else {
+      clearError('message');
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, type: string) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    if (type === 'cert') {
+      if (!file.type.startsWith('image/')) {
+        setError('certTemplate', 'Only image files allowed');
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setError('certTemplate', `File too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+        return;
+      }
+      clearError('certTemplate');
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setCertTemplate(event.target?.result as string);
+        setCertPreview(event.target?.result as string);
+        setNamePosition(null);
+        setCertPreviewName('John Doe');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const generateCertificateWithName = (name: string, position?: {x: number, y: number}): Promise<string> => {
+    return new Promise((resolve) => {
+      if (!certTemplate) {
+        resolve('');
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        resolve('');
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve('');
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const posX = position ? position.x : (namePosition ? namePosition.x : canvas.width / 2);
+        const posY = position ? position.y : (namePosition ? namePosition.y : canvas.height / 2);
+
+        ctx.font = 'bold 60px "Times New Roman", serif';
+        ctx.fillStyle = '#1a365d';
+        ctx.textAlign = 'center';
+        ctx.fillText(name, posX, posY);
+
+        const dataUrl = canvas.toDataURL('image/png');
+        resolve(dataUrl);
+      };
+      img.src = certTemplate;
+    });
+  };
+
+  const generateHtml = (): string => {
+    const escapedMessage = customMessage
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    
+    if (emailType === 'invitation') {
+      return `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px;">
+          <div style="background: white; padding: 40px; border-radius: 15px; text-align: center;">
+            <h2 style="color: #667eea; margin-bottom: 20px; font-size: 28px;">You are Invited!</h2>
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.8;">Dear Participant,</p>
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.8;">${escapedMessage || 'We are pleased to invite you to our upcoming event. Your presence would be an honor.'}</p>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
+              <p style="color: #667eea; font-weight: 600;">Best regards,<br/>Event Team</p>
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      return `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 20px;">
+          <div style="background: white; padding: 40px; border-radius: 15px; text-align: center;">
+            <h2 style="color: #f5576c; margin-bottom: 20px; font-size: 28px;">Congratulations!</h2>
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.8;">Dear Student,</p>
+            <p style="color: #4a5568; font-size: 16px; line-height: 1.8;">${escapedMessage || 'We are proud to award you this certificate of completion. Your dedication and hard work have paid off!'}</p>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
+              <p style="color: #f5576c; font-weight: 600;">Congratulations once again!<br/>Certificate Team</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  };
+
+  const sendEmails = async () => {
+    const newErrors: Record<string, string> = {};
+
+    if (emails.length === 0) {
+      newErrors.recipients = 'Please add at least one valid recipient';
+    }
+
+    if (!subject.trim()) {
+      newErrors.subject = 'Subject is required';
+    } else if (subject.length > MAX_SUBJECT_LENGTH) {
+      newErrors.subject = `Subject must be under ${MAX_SUBJECT_LENGTH} characters`;
+    }
+
+    if (emailType === 'certificate' && !certTemplate) {
+      newErrors.certTemplate = 'Certificate template is required';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setSending(true);
+    setShowResults(false);
+    setErrors({});
+
+    try {
+      const emailResults: Result[] = [];
+
+      for (let i = 0; i < recipients.length; i++) {
+        const recipient = recipients[i];
+        
+        try {
+          let certDataUrl = null;
+          if (emailType === 'certificate' && certTemplate && recipient.name) {
+            certDataUrl = await generateCertificateWithName(recipient.name);
+          }
+
+          const response = await fetch('/api/send-bulk-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              emails: [recipient.email],
+              subject: subject,
+              html: generateHtml(),
+              type: emailType,
+              certificate: certDataUrl,
+              recipientName: recipient.name,
+              demoMode: isDemoMode,
+              attachments: emailType === 'invitation' ? attachments : []
+            })
+          });
+
+          const data = await response.json();
+          
+          if (data.results && data.results[0]) {
+            emailResults.push(data.results[0]);
+          } else {
+            emailResults.push({ email: recipient.email, success: true });
+          }
+
+          if (i < recipients.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+        } catch (error) {
+          emailResults.push({ email: recipient.email, success: false, error: 'Failed to send' });
+        }
+      }
+
+      setResults(emailResults);
+      setShowResults(true);
+    } catch (error) {
+      setErrors({ submit: 'Failed to send emails. Please try again.' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const successfulEmails = results.filter(r => r.success);
+  const failedEmails = results.filter(r => !r.success);
+
+  const previewCertificate = async (name: string) => {
+    if (!certTemplate) return;
+    
+    const certDataUrl = await generateCertificateWithName(name || certPreviewName || 'John Doe', namePosition || undefined);
+    setCertPreview(certDataUrl);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-slate-900 py-8 px-4">
+      <canvas ref={canvasRef} className="hidden" />
+      
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Bulk Email Sender</h1>
+            <p className="text-slate-400 text-sm mt-1">Send emails with attachments</p>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-xs">{isDemoMode ? 'Demo' : 'Live'}</span>
+            <button
+              onClick={() => setIsDemoMode(!isDemoMode)}
+              className={`w-10 h-5 rounded-full transition-colors relative ${
+                isDemoMode ? 'bg-amber-500' : 'bg-slate-600'
+              }`}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                isDemoMode ? 'left-5' : 'left-0.5'
+              }`} />
+            </button>
+          </div>
+        </div>
+
+        {isDemoMode && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-6">
+            <p className="text-amber-400 text-sm text-center">
+              Demo mode - Add RESEND_API_KEY for real sending
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setEmailType('invitation')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              emailType === 'invitation'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            Invitations
+          </button>
+          <button
+            onClick={() => setEmailType('certificate')}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              emailType === 'certificate'
+                ? 'bg-pink-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            Certificates
+          </button>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-6 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-white font-medium">
+              Recipients 
+              <span className="text-slate-400 text-sm ml-2">
+                ({emailType === 'certificate' ? recipients.length : emails.length})
+              </span>
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab('upload')}
+                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  activeTab === 'upload'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }`}
+              >
+                Upload
+              </button>
+              <button
+                onClick={() => setActiveTab('paste')}
+                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  activeTab === 'paste'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }`}
+              >
+                Paste
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'upload' ? (
+            <label className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+              errors.fileUpload 
+                ? 'border-red-500 bg-red-500/5' 
+                : 'border-slate-600 hover:border-slate-500'
+            }`}>
+              <UploadIcon />
+              <p className={`text-sm mt-2 ${errors.fileUpload ? 'text-red-400' : 'text-slate-400'}`}>
+                {emailType === 'certificate' ? 'Upload CSV (email, name)' : 'Upload email list'}
+              </p>
+              {errors.fileUpload ? (
+                <p className="text-red-400 text-xs mt-2">{errors.fileUpload}</p>
+              ) : (
+                <>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Supported: <span className="text-blue-400 font-medium">.csv</span> or .txt (max {MAX_FILE_SIZE / 1024 / 1024}MB)
+                  </p>
+                  <p className="text-slate-600 text-xs mt-2">
+                    Format: email addresses (e.g., user@example.com)
+                  </p>
+                </>
+              )}
+              <input
+                type="file"
+                accept=".csv,.txt"
+                onChange={emailType === 'certificate' ? handleCSVUpload : handleFileUpload}
+                className="hidden"
+              />
+            </label>
+          ) : (
+            <>
+              <textarea
+                onChange={handlePaste}
+                placeholder={emailType === 'certificate' 
+                  ? 'email@example.com,John Doe\nemail@example.com,Jane Doe\n...' 
+                  : 'email@example.com\njohn@example.com\njane@example.com\n...'}
+                className={`w-full h-32 p-3 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none resize-none ${
+                  errors.recipients 
+                    ? 'bg-slate-700 border-2 border-red-500' 
+                    : 'bg-slate-700 border border-slate-600 focus:border-blue-500'
+                }`}
+              />
+              {errors.recipients && (
+                <p className="text-red-400 text-xs mt-1">{errors.recipients}</p>
+              )}
+              {!errors.recipients && (
+                <p className="text-slate-500 text-xs mt-2">
+                  {emailType === 'certificate' 
+                    ? 'Tip: One email per line in format: email,name' 
+                    : 'Tip: One email address per line'}
+                </p>
+              )}
+            </>
+          )}
+
+          {(recipients.length > 0 || emails.length > 0) && (
+            <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <CheckIcon />
+                <span className="text-emerald-400 text-sm">
+                  {emailType === 'certificate' ? recipients.length : emails.length} recipients
+                </span>
+              </div>
+              {emailType === 'certificate' && recipients.length > 0 && (
+                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
+                  {recipients.slice(0, 5).map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs text-slate-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      <span className="text-slate-300">{r.name || 'No name'}</span>
+                      <span className="text-slate-500">{r.email}</span>
+                    </div>
+                  ))}
+                  {recipients.length > 5 && (
+                    <p className="text-slate-500 text-xs">+{recipients.length - 5} more</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {emailType === 'certificate' && (
+          <div className="bg-slate-800 rounded-xl p-5 mb-4">
+            <h2 className="text-white font-medium mb-4">Certificate Template</h2>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => handleDrop(e, 'cert')}
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${
+                isDragging 
+                  ? 'border-pink-500 bg-pink-500/10' 
+                  : errors.certTemplate 
+                  ? 'border-red-500 bg-red-500/5'
+                  : 'border-slate-600 hover:border-slate-500'
+              }`}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {errors.certTemplate && (
+                <p className="text-red-400 text-xs mb-3">{errors.certTemplate}</p>
+              )}
+              {certTemplate ? (
+                <div>
+                  <img 
+                    ref={certImageRef}
+                    src={certTemplate} 
+                    alt="Template" 
+                    className="max-h-40 mx-auto rounded-lg mb-3"
+                  />
+                  <label className="inline-block px-3 py-1.5 bg-slate-700 text-slate-300 text-xs rounded-md cursor-pointer hover:bg-slate-600 transition-colors mr-2">
+                    Change Template
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              ) : (
+                <>
+                  <p className="text-slate-400 text-sm mb-3">Upload certificate image (PNG, JPG)</p>
+                  <label className="inline-block px-4 py-2 bg-pink-600 text-white text-sm rounded-md cursor-pointer hover:bg-pink-700 transition-colors">
+                    Upload Template
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
+            {certTemplate && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="text"
+                    placeholder="Enter name to preview..."
+                    className="flex-1 p-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:border-pink-500 focus:outline-none"
+                    value={certPreviewName}
+                    onChange={(e) => {
+                      setCertPreviewName(sanitizeInput(e.target.value).slice(0, 100));
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      const data = await generateCertificateWithName(certPreviewName || 'Preview');
+                      setCertPreview(data);
+                    }}
+                    className="px-3 py-2.5 bg-slate-700 text-slate-300 text-xs rounded-lg hover:bg-slate-600 transition-colors"
+                  >
+                    Update Preview
+                  </button>
+                </div>
+                
+                {certPreview && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-slate-400 text-xs">Click on image to set name position</p>
+                      <button
+                        onClick={() => setSelectingPosition(!selectingPosition)}
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          selectingPosition 
+                            ? 'bg-pink-600 text-white' 
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {selectingPosition ? 'Click on image...' : 'Set Name Position'}
+                      </button>
+                    </div>
+                    <div 
+                      className={`relative inline-block cursor-crosshair ${selectingPosition ? 'ring-2 ring-pink-500 rounded-lg' : ''}`}
+                      onClick={(e) => {
+                        if (!selectingPosition) return;
+                        const img = e.currentTarget.querySelector('img');
+                        if (!img) return;
+                        
+                        const rect = img.getBoundingClientRect();
+                        const scaleX = img.naturalWidth / rect.width;
+                        const scaleY = img.naturalHeight / rect.height;
+                        
+                        const x = (e.clientX - rect.left) * scaleX;
+                        const y = (e.clientY - rect.top) * scaleY;
+                        
+                        setNamePosition({ x, y });
+                        setSelectingPosition(false);
+                        
+                        setCertPreviewName(prev => {
+                          const name = prev || 'Preview';
+                          generateCertificateWithName(name, { x, y }).then(data => setCertPreview(data));
+                          return prev;
+                        });
+                      }}
+                    >
+                      <img 
+                        ref={certImageRef}
+                        src={certPreview} 
+                        alt="Preview" 
+                        className="max-w-full h-auto max-h-48 rounded-lg"
+                      />
+                      {namePosition && (
+                        <div 
+                          className="absolute w-4 h-4 bg-pink-500 rounded-full border-2 border-white transform -translate-x-1/2 -translate-y-1/2 pointer-events-none shadow-lg"
+                          style={{ 
+                            left: namePosition ? `${(namePosition.x / (certImageRef.current?.naturalWidth || 1)) * 100}%` : '50%',
+                            top: namePosition ? `${(namePosition.y / (certImageRef.current?.naturalHeight || 1)) * 100}%` : '50%'
+                          }}
+                        />
+                      )}
+                    </div>
+                    {namePosition && (
+                      <p className="text-slate-500 text-xs mt-2">
+                        Name position: X={Math.round(namePosition.x)}, Y={Math.round(namePosition.y)}
+                        <button
+                          onClick={() => {
+                            setNamePosition(null);
+                            generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                          }}
+                          className="ml-2 text-pink-400 hover:text-pink-300"
+                        >
+                          Reset to center
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="bg-slate-800 rounded-xl p-6 mb-4">
+          <h2 className="text-white font-medium mb-4">Email Content</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-slate-400 text-xs mb-1.5 block">
+                Subject <span className="text-red-400">*</span>
+                <span className="text-slate-600 float-right">{subject.length}/{MAX_SUBJECT_LENGTH}</span>
+              </label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => handleSubjectChange(e.target.value)}
+                placeholder={emailType === 'invitation' ? 'You are invited!' : 'Congratulations on your certificate!'}
+                className={`w-full p-3 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none ${
+                  errors.subject 
+                    ? 'bg-slate-700 border-2 border-red-500' 
+                    : 'bg-slate-700 border border-slate-600 focus:border-blue-500'
+                }`}
+              />
+              {errors.subject && (
+                <p className="text-red-400 text-xs mt-1">{errors.subject}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-slate-400 text-xs mb-1.5 block">
+                Message
+                <span className="text-slate-600 float-right">{customMessage.length}/{MAX_MESSAGE_LENGTH}</span>
+              </label>
+              <textarea
+                value={customMessage}
+                onChange={(e) => handleMessageChange(e.target.value)}
+                placeholder={emailType === 'invitation' 
+                  ? 'Enter your message...' 
+                  : 'Enter your certificate message...'}
+                className={`w-full h-20 p-3 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none resize-none ${
+                  errors.message 
+                    ? 'bg-slate-700 border-2 border-red-500' 
+                    : 'bg-slate-700 border border-slate-600 focus:border-blue-500'
+                }`}
+              />
+              {errors.message && (
+                <p className="text-red-400 text-xs mt-1">{errors.message}</p>
+              )}
+            </div>
+
+            {emailType === 'invitation' && (
+              <div>
+                <label className="text-slate-400 text-xs mb-1.5 block">
+                  Attachments
+                  <span className="text-slate-600 ml-2">(max {MAX_TOTAL_ATTACHMENTS} files, {MAX_ATTACHMENT_SIZE / 1024 / 1024}MB each)</span>
+                </label>
+                <label className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all ${
+                  errors.attachments 
+                    ? 'bg-slate-700 border-2 border-red-500' 
+                    : 'bg-slate-700 border border-slate-600 hover:border-slate-500'
+                }`}>
+                  <PaperclipIcon />
+                  <span className="text-slate-400 text-sm">
+                    {attachments.length > 0 ? `${attachments.length} file${attachments.length > 1 ? 's' : ''} attached` : 'Add files'}
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleAttachmentUpload}
+                    className="hidden"
+                  />
+                </label>
+                {errors.attachments && (
+                  <p className="text-red-400 text-xs mt-1">{errors.attachments}</p>
+                )}
+                {attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {attachments.map((file, index) => (
+                      <div key={index} className="flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded-md text-sm">
+                        <span className="text-slate-300 truncate max-w-[120px]">{file.name}</span>
+                        <span className="text-slate-500 text-xs">{formatFileSize(file.size)}</span>
+                        <button
+                          onClick={() => removeAttachment(index)}
+                          className="text-slate-500 hover:text-red-400 ml-1"
+                        >
+                          <XIcon />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {errors.submit && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+            <p className="text-red-400 text-sm text-center">{errors.submit}</p>
+          </div>
+        )}
+        <button
+          onClick={sendEmails}
+          disabled={sending || emails.length === 0}
+          className={`w-full py-3.5 rounded-xl text-white font-medium text-sm transition-all flex items-center justify-center gap-2 ${
+            sending || emails.length === 0
+              ? 'bg-slate-700 cursor-not-allowed'
+              : isDemoMode
+              ? 'bg-amber-600 hover:bg-amber-700'
+              : emailType === 'certificate'
+              ? 'bg-pink-600 hover:bg-pink-700'
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+        >
+          {sending ? (
+            <>
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              Sending to {emails.length} recipients...
+            </>
+          ) : (
+            <>
+              <SendIcon />
+              {isDemoMode ? 'Simulate Send' : 'Send'} {emailType === 'certificate' ? 'Certificates' : 'Invitations'} ({emails.length})
+            </>
+          )}
+        </button>
+
+        {showResults && (
+          <div className="bg-slate-800 rounded-xl p-6 mt-4">
+            <h2 className="text-white font-medium mb-4">Results</h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                <p className="text-2xl font-bold text-emerald-400">{successfulEmails.length}</p>
+                <p className="text-slate-400 text-sm">Sent</p>
+              </div>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                <p className="text-2xl font-bold text-red-400">{failedEmails.length}</p>
+                <p className="text-slate-400 text-sm">Failed</p>
+              </div>
+            </div>
+
+            {failedEmails.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-red-400 text-sm font-medium mb-2">Failed:</h3>
+                <ul className="space-y-1 text-sm text-slate-400">
+                  {failedEmails.map((r, i) => (
+                    <li key={i}>{r.email}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
