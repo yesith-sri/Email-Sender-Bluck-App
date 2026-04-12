@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         attachments: [
           {
             filename: `Certificate - ${recipientName || 'Recipient'}.png`,
-            data: buffer.toString('base64'),
+            content: buffer.toString('base64'),
           },
         ],
       });
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     const emailAttachments = attachments && attachments.length > 0
       ? attachments.map((att: { name: string; data: string }) => ({
           filename: att.name,
-          data: att.data.split(',')[1],
+          content: att.data.split(',')[1],
         }))
       : [];
 
