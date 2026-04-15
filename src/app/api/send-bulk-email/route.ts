@@ -4,6 +4,17 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY) 
   : null;
 
+const fromEmail =
+  process.env.RESEND_FROM_EMAIL ||
+  process.env.FROM_EMAIL ||
+  'onboarding@resend.dev';
+
+function extractBase64(data: string): string {
+  if (!data) return '';
+  const parts = data.split(',');
+  return parts.length > 1 ? parts[1] : data;
+}
+
 export async function POST(request: Request) {
   try {
     const { emails, subject, html, type, certificate, recipientName, attachments } = await request.json();
@@ -22,11 +33,15 @@ export async function POST(request: Request) {
     for (const email of emails) {
       try {
         if (certificate && type === 'certificate') {
-          const base64Data = certificate.split(',')[1];
+          const base64Data = extractBase64(certificate);
+          if (!base64Data) {
+            results.push({ email, success: false, error: 'Invalid certificate data' });
+            continue;
+          }
           const buffer = Buffer.from(base64Data, 'base64');
 
           const { data, error } = await resend.emails.send({
-            from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
+            from: fromEmail,
             to: email,
             subject: subject,
             html: html,
@@ -49,12 +64,12 @@ export async function POST(request: Request) {
           const emailAttachments = attachments && attachments.length > 0
             ? attachments.map((att: { name: string; data: string }) => ({
                 filename: att.name,
-                content: att.data.split(',')[1],
+                content: extractBase64(att.data),
               }))
             : [];
 
           const { data, error } = await resend.emails.send({
-            from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
+            from: fromEmail,
             to: email,
             subject: subject,
             html: html,

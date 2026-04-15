@@ -129,6 +129,9 @@ export default function BulkEmailSender() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const certImageRef = useRef<HTMLImageElement>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
+  const [sendMode, setSendMode] = useState<'bulk' | 'individual'>('bulk');
+  const [individualEmail, setIndividualEmail] = useState('');
+  const [individualName, setIndividualName] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -464,8 +467,20 @@ export default function BulkEmailSender() {
   const sendEmails = async () => {
     const newErrors: Record<string, string> = {};
 
-    if (emails.length === 0) {
-      newErrors.recipients = 'Please add at least one valid recipient';
+    if (sendMode === 'bulk') {
+      if (emails.length === 0) {
+        newErrors.recipients = 'Please add at least one valid recipient';
+      }
+    } else {
+      if (!individualEmail.trim()) {
+        newErrors.individualEmail = 'Email is required';
+      } else if (!validateEmail(individualEmail)) {
+        newErrors.individualEmail = 'Please enter a valid email';
+      }
+      
+      if (emailType === 'certificate' && !individualName.trim()) {
+        newErrors.individualName = 'Name is required';
+      }
     }
 
     if (!subject.trim()) {
@@ -490,7 +505,9 @@ export default function BulkEmailSender() {
     try {
       const emailResults: Result[] = [];
 
-      const emailList = emailType === 'certificate' ? recipients : emails.map(e => ({ email: e, name: '' }));
+      const emailList = sendMode === 'individual' 
+        ? [{ email: individualEmail.trim().toLowerCase(), name: individualName.trim() }]
+        : (emailType === 'certificate' ? recipients : emails.map(e => ({ email: e, name: '' })));
 
       for (let i = 0; i < emailList.length; i++) {
         const recipient = emailList[i];
@@ -595,34 +612,100 @@ export default function BulkEmailSender() {
             <h2 className="text-white font-medium">
               Recipients 
               <span className="text-slate-400 text-sm ml-2">
-                ({emailType === 'certificate' ? recipients.length : emails.length})
+                {sendMode === 'bulk' 
+                  ? `(${emailType === 'certificate' ? recipients.length : emails.length})` 
+                  : '(Individual)'}
               </span>
             </h2>
             <div className="flex gap-2">
               <button
-                onClick={() => setActiveTab('upload')}
+                onClick={() => setSendMode('bulk')}
                 className={`px-3 py-1 text-xs rounded-md transition-all ${
-                  activeTab === 'upload'
+                  sendMode === 'bulk'
                     ? 'bg-blue-600 text-white'
                     : 'bg-slate-700 text-slate-400'
                 }`}
               >
-                Upload
+                Bulk
               </button>
               <button
-                onClick={() => setActiveTab('paste')}
+                onClick={() => setSendMode('individual')}
                 className={`px-3 py-1 text-xs rounded-md transition-all ${
-                  activeTab === 'paste'
+                  sendMode === 'individual'
                     ? 'bg-blue-600 text-white'
                     : 'bg-slate-700 text-slate-400'
                 }`}
               >
-                Paste
+                Individual
               </button>
             </div>
           </div>
 
-          {activeTab === 'upload' ? (
+          {sendMode === 'bulk' ? (
+            <div className="mb-4">
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setActiveTab('upload')}
+                  className={`px-3 py-1 text-xs rounded-md transition-all ${
+                    activeTab === 'upload'
+                      ? 'bg-slate-600 text-white'
+                      : 'bg-slate-700 text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Upload
+                </button>
+                <button
+                  onClick={() => setActiveTab('paste')}
+                  className={`px-3 py-1 text-xs rounded-md transition-all ${
+                    activeTab === 'paste'
+                      ? 'bg-slate-600 text-white'
+                      : 'bg-slate-700 text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  Paste
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {sendMode === 'individual' ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-slate-400 text-xs mb-1.5 block">Recipient Email</label>
+                <input
+                  type="email"
+                  value={individualEmail}
+                  onChange={(e) => {
+                    setIndividualEmail(e.target.value);
+                    if (errors.individualEmail) clearError('individualEmail');
+                  }}
+                  placeholder="test@example.com"
+                  className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none ${
+                    errors.individualEmail ? 'border-red-500' : 'border-slate-600 focus:border-blue-500'
+                  }`}
+                />
+                {errors.individualEmail && <p className="text-red-400 text-xs mt-1">{errors.individualEmail}</p>}
+              </div>
+              {emailType === 'certificate' && (
+                <div>
+                  <label className="text-slate-400 text-xs mb-1.5 block">Recipient Name</label>
+                  <input
+                    type="text"
+                    value={individualName}
+                    onChange={(e) => {
+                      setIndividualName(e.target.value);
+                      if (errors.individualName) clearError('individualName');
+                    }}
+                    placeholder="John Doe"
+                    className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none ${
+                      errors.individualName ? 'border-red-500' : 'border-slate-600 focus:border-blue-500'
+                    }`}
+                  />
+                  {errors.individualName && <p className="text-red-400 text-xs mt-1">{errors.individualName}</p>}
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'upload' ? (
             <label className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
               errors.fileUpload 
                 ? 'border-red-500 bg-red-500/5' 
@@ -677,7 +760,7 @@ export default function BulkEmailSender() {
             </>
           )}
 
-          {(recipients.length > 0 || emails.length > 0) && (
+          {sendMode === 'bulk' && (recipients.length > 0 || emails.length > 0) && (
             <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
               <div className="flex items-center gap-2">
                 <CheckIcon />
@@ -954,9 +1037,9 @@ export default function BulkEmailSender() {
         )}
         <button
           onClick={sendEmails}
-          disabled={sending || (emailType === 'certificate' ? recipients.length === 0 : emails.length === 0)}
+          disabled={sending || (sendMode === 'bulk' ? (emailType === 'certificate' ? recipients.length === 0 : emails.length === 0) : !individualEmail)}
           className={`w-full py-3.5 rounded-xl text-white font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-            sending || emails.length === 0
+            sending || (sendMode === 'bulk' ? (emailType === 'certificate' ? recipients.length === 0 : emails.length === 0) : !individualEmail)
               ? 'bg-slate-700 cursor-not-allowed'
               : emailType === 'certificate'
               ? 'bg-pink-600 hover:bg-pink-700'
@@ -969,12 +1052,12 @@ export default function BulkEmailSender() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Sending to {emails.length} recipients...
+              Sending to {sendMode === 'individual' ? '1 recipient' : `${emailList.length} recipients`}...
             </>
           ) : (
             <>
               <SendIcon />
-              Send {emailType === 'certificate' ? 'Certificates' : 'Invitations'} ({emails.length})
+              Send {emailType === 'certificate' ? 'Certificates' : 'Invitations'} {sendMode === 'individual' ? '' : `(${emailType === 'certificate' ? recipients.length : emails.length})`}
             </>
           )}
         </button>
