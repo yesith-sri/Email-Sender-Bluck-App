@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import Swal from 'sweetalert2';
 
 type EmailType = 'invitation' | 'certificate';
 type Result = {
@@ -134,6 +135,21 @@ export default function BulkEmailSender() {
   const [individualName, setIndividualName] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setEmails([]);
+    setRecipients([]);
+    setAttachments([]);
+    setSubject('');
+    setCustomMessage('');
+    setCertTemplate(null);
+    setCertPreview(null);
+    setCertPreviewName('John Doe');
+    setNamePosition(null);
+    setIndividualEmail('');
+    setIndividualName('');
+    setShowResults(false);
+  }, [sendMode, emailType]);
 
   const setError = (field: string, message: string) => {
     setErrors(prev => ({ ...prev, [field]: message }));
@@ -554,6 +570,38 @@ export default function BulkEmailSender() {
 
       setResults(emailResults);
       setShowResults(true);
+      
+      const successCount = emailResults.filter(r => r.success).length;
+      const failedCount = emailResults.filter(r => !r.success).length;
+      
+      if (failedCount === 0) {
+        Swal.fire({
+          icon: 'success',
+          title: 'All Emails Sent!',
+          text: `${successCount} email(s) sent successfully.`,
+          background: '#1e293b',
+          color: '#fff',
+          confirmButtonColor: '#3b82f6',
+        });
+      } else if (successCount === 0) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Sending Failed!',
+          text: `${failedCount} email(s) failed to send.`,
+          background: '#1e293b',
+          color: '#fff',
+          confirmButtonColor: '#ef4444',
+        });
+      } else {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Partial Success',
+          text: `${successCount} sent, ${failedCount} failed.`,
+          background: '#1e293b',
+          color: '#fff',
+          confirmButtonColor: '#f59e0b',
+        });
+      }
     } catch (error) {
       setErrors({ submit: 'Failed to send emails. Please try again.' });
     } finally {
@@ -620,20 +668,20 @@ export default function BulkEmailSender() {
             <div className="flex gap-2">
               <button
                 onClick={() => setSendMode('bulk')}
-                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                className={`px-4 py-2 text-sm rounded-lg transition-all duration-300 transform ${
                   sendMode === 'bulk'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-400'
+                    ? 'bg-blue-600 text-white scale-105 shadow-lg shadow-blue-500/30'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
                 }`}
               >
                 Bulk
               </button>
               <button
                 onClick={() => setSendMode('individual')}
-                className={`px-3 py-1 text-xs rounded-md transition-all ${
+                className={`px-4 py-2 text-sm rounded-lg transition-all duration-300 transform ${
                   sendMode === 'individual'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 text-slate-400'
+                    ? 'bg-blue-600 text-white scale-105 shadow-lg shadow-blue-500/30'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
                 }`}
               >
                 Individual
@@ -642,24 +690,24 @@ export default function BulkEmailSender() {
           </div>
 
           {sendMode === 'bulk' ? (
-            <div className="mb-4">
+            <div className="mb-4 animate-fade-in">
               <div className="flex gap-2 mb-4">
                 <button
                   onClick={() => setActiveTab('upload')}
-                  className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  className={`px-4 py-2 text-sm rounded-lg transition-all duration-300 transform ${
                     activeTab === 'upload'
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-700 text-slate-500 hover:text-slate-300'
+                      ? 'bg-blue-600 text-white scale-105 shadow-lg shadow-blue-500/30'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
                   }`}
                 >
                   Upload
                 </button>
                 <button
                   onClick={() => setActiveTab('paste')}
-                  className={`px-3 py-1 text-xs rounded-md transition-all ${
+                  className={`px-4 py-2 text-sm rounded-lg transition-all duration-300 transform ${
                     activeTab === 'paste'
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-700 text-slate-500 hover:text-slate-300'
+                      ? 'bg-blue-600 text-white scale-105 shadow-lg shadow-blue-500/30'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
                   }`}
                 >
                   Paste
@@ -669,7 +717,7 @@ export default function BulkEmailSender() {
           ) : null}
 
           {sendMode === 'individual' ? (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-fade-in">
               <div>
                 <label className="text-slate-400 text-xs mb-1.5 block">Recipient Email</label>
                 <input
@@ -680,7 +728,7 @@ export default function BulkEmailSender() {
                     if (errors.individualEmail) clearError('individualEmail');
                   }}
                   placeholder="test@example.com"
-                  className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none ${
+                  className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
                     errors.individualEmail ? 'border-red-500' : 'border-slate-600 focus:border-blue-500'
                   }`}
                 />
@@ -697,7 +745,7 @@ export default function BulkEmailSender() {
                       if (errors.individualName) clearError('individualName');
                     }}
                     placeholder="John Doe"
-                    className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none ${
+                    className={`w-full p-2.5 bg-slate-700 border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
                       errors.individualName ? 'border-red-500' : 'border-slate-600 focus:border-blue-500'
                     }`}
                   />
@@ -706,10 +754,10 @@ export default function BulkEmailSender() {
               )}
             </div>
           ) : activeTab === 'upload' ? (
-            <label className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+            <label className={`block border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-300 animate-fade-in hover:bg-slate-700/30 ${
               errors.fileUpload 
                 ? 'border-red-500 bg-red-500/5' 
-                : 'border-slate-600 hover:border-slate-500'
+                : 'border-slate-600 hover:border-blue-500'
             }`}>
               <UploadIcon />
               <p className={`text-sm mt-2 ${errors.fileUpload ? 'text-red-400' : 'text-slate-400'}`}>
@@ -735,13 +783,13 @@ export default function BulkEmailSender() {
               />
             </label>
           ) : (
-            <>
+            <div className="animate-fade-in">
               <textarea
                 onChange={handlePaste}
                 placeholder={emailType === 'certificate' 
                   ? 'email@example.com,John Doe\nemail@example.com,Jane Doe\n...' 
                   : 'email@example.com\njohn@example.com\njane@example.com\n...'}
-                className={`w-full h-32 p-3 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none resize-none ${
+                className={`w-full h-32 p-3 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none transition-all ${
                   errors.recipients 
                     ? 'bg-slate-700 border-2 border-red-500' 
                     : 'bg-slate-700 border border-slate-600 focus:border-blue-500'
@@ -757,21 +805,21 @@ export default function BulkEmailSender() {
                     : 'Tip: One email address per line'}
                 </p>
               )}
-            </>
+            </div>
           )}
 
           {sendMode === 'bulk' && (recipients.length > 0 || emails.length > 0) && (
-            <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+            <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 animate-slide-up">
               <div className="flex items-center gap-2">
                 <CheckIcon />
-                <span className="text-emerald-400 text-sm">
+                <span className="text-emerald-400 text-sm font-medium">
                   {emailType === 'certificate' ? recipients.length : emails.length} recipients
                 </span>
               </div>
               {emailType === 'certificate' && recipients.length > 0 && (
                 <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
                   {recipients.slice(0, 5).map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-slate-400">
+                    <div key={i} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white transition-colors">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                       <span className="text-slate-300">{r.name || 'No name'}</span>
                       <span className="text-slate-500">{r.email}</span>
@@ -1052,7 +1100,7 @@ export default function BulkEmailSender() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Sending to {sendMode === 'individual' ? '1 recipient' : `${emailList.length} recipients`}...
+              Sending to {sendMode === 'individual' ? '1 recipient' : `${emailType === 'certificate' ? recipients.length : emails.length} recipients`}...
             </>
           ) : (
             <>
@@ -1063,28 +1111,44 @@ export default function BulkEmailSender() {
         </button>
 
         {showResults && (
-          <div className="bg-slate-800 rounded-xl p-6 mt-4">
-            <h2 className="text-white font-medium mb-4">Results</h2>
+          <div className="bg-slate-800 rounded-xl p-6 mt-4 animate-fade-in">
+            <h2 className="text-white font-medium mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Results
+            </h2>
             
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
-                <p className="text-2xl font-bold text-emerald-400">{successfulEmails.length}</p>
-                <p className="text-slate-400 text-sm">Sent</p>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 hover:bg-emerald-500/20 hover:scale-105 transition-all duration-300 cursor-pointer">
+                <p className="text-3xl font-bold text-emerald-400">{successfulEmails.length}</p>
+                <p className="text-slate-400 text-sm flex items-center gap-1 mt-1">
+                  <CheckIcon /> Sent
+                </p>
               </div>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                <p className="text-2xl font-bold text-red-400">{failedEmails.length}</p>
-                <p className="text-slate-400 text-sm">Failed</p>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 hover:bg-red-500/20 hover:scale-105 transition-all duration-300 cursor-pointer">
+                <p className="text-3xl font-bold text-red-400">{failedEmails.length}</p>
+                <p className="text-slate-400 text-sm flex items-center gap-1 mt-1">
+                  <XIcon /> Failed
+                </p>
               </div>
             </div>
 
             {failedEmails.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-red-400 text-sm font-medium mb-2">Failed:</h3>
-                <ul className="space-y-1 text-sm text-slate-400">
-                  {failedEmails.map((r, i) => (
-                    <li key={i}>{r.email}</li>
-                  ))}
-                </ul>
+              <div className="mt-4 animate-slide-up">
+                <h3 className="text-red-400 text-sm font-medium mb-2 flex items-center gap-1">
+                  <XIcon /> Failed Emails:
+                </h3>
+                <div className="max-h-40 overflow-y-auto bg-slate-700/50 rounded-lg p-3">
+                  <ul className="space-y-1 text-sm text-slate-400">
+                    {failedEmails.map((r, i) => (
+                      <li key={i} className="flex items-center gap-2 hover:text-white transition-colors">
+                        <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                        {r.email}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             )}
           </div>
