@@ -131,6 +131,9 @@ export default function BulkEmailSender() {
   const [certTextColor, setCertTextColor] = useState('#1a365d');
   const [certFontSize, setCertFontSize] = useState(60);
   const [certFontFamily, setCertFontFamily] = useState('Times New Roman');
+  const [customFontUrl, setCustomFontUrl] = useState<string | null>(null);
+  const [customFontName, setCustomFontName] = useState<string>('');
+  const [fontLoaded, setFontLoaded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const certImageRef = useRef<HTMLImageElement>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
@@ -153,6 +156,9 @@ export default function BulkEmailSender() {
     setIndividualEmail('');
     setIndividualName('');
     setShowResults(false);
+    setCustomFontUrl(null);
+    setCustomFontName('');
+    setFontLoaded(false);
   }, [sendMode, emailType]);
 
   const setError = (field: string, message: string) => {
@@ -408,6 +414,28 @@ export default function BulkEmailSender() {
     }
   };
 
+  const loadCustomFont = (fontFile: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const arrayBuffer = e.target?.result as ArrayBuffer;
+        try {
+          const blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: fontFile.type }));
+          const fontFace = new FontFace(customFontName || 'CustomFont', `url(${blobUrl})`);
+          await fontFace.load();
+          document.fonts.add(fontFace);
+          setFontLoaded(true);
+          setCustomFontUrl(blobUrl);
+          resolve(customFontName || 'CustomFont');
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(fontFile);
+    });
+  };
+
   const generateCertificateWithName = (name: string, position?: {x: number, y: number}): Promise<string> => {
     return new Promise((resolve) => {
       if (!certTemplate) {
@@ -436,7 +464,8 @@ export default function BulkEmailSender() {
         const posX = position ? position.x : (namePosition ? namePosition.x : canvas.width / 2);
         const posY = position ? position.y : (namePosition ? namePosition.y : canvas.height / 2);
 
-        ctx.font = `bold ${certFontSize}px "${certFontFamily}", serif`;
+        const fontFamily = fontLoaded && customFontName ? customFontName : certFontFamily;
+        ctx.font = `bold ${certFontSize}px "${fontFamily}", serif`;
         ctx.fillStyle = certTextColor;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1053,8 +1082,9 @@ export default function BulkEmailSender() {
                   <div>
                     <label className="text-slate-400 text-xs mb-1.5 block">Font Family</label>
                     <select
-                      value={certFontFamily}
+                      value={fontLoaded ? 'custom' : certFontFamily}
                       onChange={(e) => {
+                        if (e.target.value === 'custom') return;
                         setCertFontFamily(e.target.value);
                         generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
                       }}
@@ -1066,8 +1096,47 @@ export default function BulkEmailSender() {
                       <option value="Verdana">Verdana</option>
                       <option value="Courier New">Courier New</option>
                       <option value="Impact">Impact</option>
+                      {fontLoaded && <option value="custom">{customFontName || 'Custom Font'}</option>}
                     </select>
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-600">
+                  <label className="text-slate-400 text-xs mb-1.5 block">Custom Font (.ttf, .otf, .woff)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customFontName}
+                      onChange={(e) => setCustomFontName(e.target.value)}
+                      placeholder="Font name (e.g. SignatureFont)"
+                      className="flex-1 p-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm placeholder-slate-500 focus:border-pink-500 focus:outline-none"
+                    />
+                    <label className="px-4 py-2 bg-pink-600 text-white text-sm rounded-lg cursor-pointer hover:bg-pink-700 transition-colors">
+                      Upload Font
+                      <input
+                        type="file"
+                        accept=".ttf,.otf,.woff,.woff2"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (!customFontName.trim()) {
+                            setError('customFont', 'Please enter a font name first');
+                            return;
+                          }
+                          clearError('customFont');
+                          try {
+                            await loadCustomFont(file);
+                            generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                          } catch (err) {
+                            setError('customFont', 'Failed to load font');
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {errors.customFont && <p className="text-red-400 text-xs mt-1">{errors.customFont}</p>}
+                  {fontLoaded && <p className="text-emerald-400 text-xs mt-1">Custom font loaded successfully!</p>}
+                  <p className="text-slate-500 text-xs mt-2">Note: Custom fonts may not display in preview, but will appear in sent certificates</p>
                 </div>
               </div>
             )}
