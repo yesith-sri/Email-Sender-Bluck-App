@@ -1071,6 +1071,61 @@ export default function BulkEmailSender() {
                 </div>
               </div>
             )}
+
+            {certTemplate && (
+              <div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
+                <h3 className="text-slate-300 text-sm font-medium mb-3">⚙️ Configuration</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Name X</label>
+                    <input
+                      type="number"
+                      value={namePosition?.x || ''}
+                      onChange={(e) => {
+                        const x = Number(e.target.value);
+                        if (!isNaN(x)) {
+                          const newPos = { x, y: namePosition?.y || 0 };
+                          setNamePosition(newPos);
+                          generateCertificateWithName(certPreviewName || 'Preview', newPos).then(data => setCertPreview(data));
+                        }
+                      }}
+                      placeholder="0"
+                      className="w-full p-2.5 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm placeholder-slate-500 focus:border-pink-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Name Y</label>
+                    <input
+                      type="number"
+                      value={namePosition?.y || ''}
+                      onChange={(e) => {
+                        const y = Number(e.target.value);
+                        if (!isNaN(y)) {
+                          const newPos = { x: namePosition?.x || 0, y };
+                          setNamePosition(newPos);
+                          generateCertificateWithName(certPreviewName || 'Preview', newPos).then(data => setCertPreview(data));
+                        }
+                      }}
+                      placeholder="0"
+                      className="w-full p-2.5 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm placeholder-slate-500 focus:border-pink-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Font Size</label>
+                    <input
+                      type="number"
+                      value={certFontSize}
+                      onChange={(e) => {
+                        setCertFontSize(Number(e.target.value));
+                        generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                      }}
+                      placeholder="60"
+                      className="w-full p-2.5 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm placeholder-slate-500 focus:border-pink-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
