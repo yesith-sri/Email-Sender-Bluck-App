@@ -127,6 +127,10 @@ export default function BulkEmailSender() {
   const [namePosition, setNamePosition] = useState<{x: number, y: number} | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [selectingPosition, setSelectingPosition] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [certTextColor, setCertTextColor] = useState('#1a365d');
+  const [certFontSize, setCertFontSize] = useState(60);
+  const [certFontFamily, setCertFontFamily] = useState('Times New Roman');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const certImageRef = useRef<HTMLImageElement>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'paste'>('upload');
@@ -432,9 +436,10 @@ export default function BulkEmailSender() {
         const posX = position ? position.x : (namePosition ? namePosition.x : canvas.width / 2);
         const posY = position ? position.y : (namePosition ? namePosition.y : canvas.height / 2);
 
-        ctx.font = 'bold 60px "Times New Roman", serif';
-        ctx.fillStyle = '#1a365d';
+        ctx.font = `bold ${certFontSize}px "${certFontFamily}", serif`;
+        ctx.fillStyle = certTextColor;
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.fillText(name, posX, posY);
 
         const dataUrl = canvas.toDataURL('image/png');
@@ -914,16 +919,56 @@ export default function BulkEmailSender() {
                   <div className="mt-3">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-slate-400 text-xs">Click on image to set name position</p>
-                      <button
-                        onClick={() => setSelectingPosition(!selectingPosition)}
-                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                          selectingPosition 
-                            ? 'bg-pink-600 text-white' 
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                      >
-                        {selectingPosition ? 'Click on image...' : 'Set Name Position'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setSelectingPosition(!selectingPosition)}
+                          className={`px-2 py-1 text-xs rounded transition-colors ${
+                            selectingPosition 
+                              ? 'bg-pink-600 text-white' 
+                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                          }`}
+                        >
+                          {selectingPosition ? 'Click on image...' : 'Set Name Position'}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            setNamePosition(null);
+                            const canvas = canvasRef.current;
+                            if (!canvas || !certTemplate) return;
+                            
+                            const ctx = canvas.getContext('2d');
+                            if (!ctx) return;
+                            
+                            const img = new Image();
+                            img.onload = () => {
+                              canvas.width = img.width;
+                              canvas.height = img.height;
+                              ctx.drawImage(img, 0, 0);
+                              
+                              const centerX = canvas.width / 2;
+                              const centerY = canvas.height / 2;
+                              
+                              ctx.font = `bold ${certFontSize}px "${certFontFamily}", serif`;
+                              ctx.fillStyle = certTextColor;
+                              ctx.textAlign = 'center';
+                              ctx.textBaseline = 'middle';
+                              ctx.fillText(certPreviewName || 'Preview', centerX, centerY + certFontSize / 4);
+                              
+                              setCertPreview(canvas.toDataURL('image/png'));
+                            };
+                            img.src = certTemplate;
+                          }}
+                          className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 transition-colors"
+                        >
+                          Reset to Center
+                        </button>
+                        <button
+                          onClick={() => setShowFullPreview(true)}
+                          className="px-2 py-1 bg-pink-600 text-white text-xs rounded hover:bg-pink-700 transition-colors"
+                        >
+                          Expand Preview
+                        </button>
+                      </div>
                     </div>
                     <div 
                       className={`relative inline-block cursor-crosshair ${selectingPosition ? 'ring-2 ring-pink-500 rounded-lg' : ''}`}
@@ -942,18 +987,15 @@ export default function BulkEmailSender() {
                         setNamePosition({ x, y });
                         setSelectingPosition(false);
                         
-                        setCertPreviewName(prev => {
-                          const name = prev || 'Preview';
-                          generateCertificateWithName(name, { x, y }).then(data => setCertPreview(data));
-                          return prev;
-                        });
+                        const name = certPreviewName || 'Preview';
+                        generateCertificateWithName(name, { x, y }).then(data => setCertPreview(data));
                       }}
                     >
                       <img 
                         ref={certImageRef}
                         src={certPreview} 
                         alt="Preview" 
-                        className="max-w-full h-auto max-h-48 rounded-lg"
+                        className="w-full max-h-[500px] rounded-lg border border-slate-600 shadow-xl"
                       />
                       {namePosition && (
                         <div 
@@ -967,20 +1009,66 @@ export default function BulkEmailSender() {
                     </div>
                     {namePosition && (
                       <p className="text-slate-500 text-xs mt-2">
-                        Name position: X={Math.round(namePosition.x)}, Y={Math.round(namePosition.y)}
-                        <button
-                          onClick={() => {
-                            setNamePosition(null);
-                            generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
-                          }}
-                          className="ml-2 text-pink-400 hover:text-pink-300"
-                        >
-                          Reset to center
-                        </button>
+                        Current position: X={Math.round(namePosition.x)}, Y={Math.round(namePosition.y)}
                       </p>
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {certTemplate && (
+              <div className="mt-4 p-4 bg-slate-700/50 rounded-lg">
+                <h3 className="text-slate-300 text-sm font-medium mb-3">Text Styling</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Color</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={certTextColor}
+                        onChange={(e) => {
+                          setCertTextColor(e.target.value);
+                          generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                        }}
+                        className="w-10 h-10 rounded cursor-pointer border border-slate-600"
+                      />
+                      <span className="text-slate-400 text-xs">{certTextColor}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Font Size: {certFontSize}px</label>
+                    <input
+                      type="range"
+                      min="20"
+                      max="150"
+                      value={certFontSize}
+                      onChange={(e) => {
+                        setCertFontSize(Number(e.target.value));
+                        generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                      }}
+                      className="w-full accent-pink-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-400 text-xs mb-1.5 block">Font Family</label>
+                    <select
+                      value={certFontFamily}
+                      onChange={(e) => {
+                        setCertFontFamily(e.target.value);
+                        generateCertificateWithName(certPreviewName || 'Preview').then(data => setCertPreview(data));
+                      }}
+                      className="w-full p-2 bg-slate-600 border border-slate-500 rounded-lg text-white text-sm"
+                    >
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Arial">Arial</option>
+                      <option value="Georgia">Georgia</option>
+                      <option value="Verdana">Verdana</option>
+                      <option value="Courier New">Courier New</option>
+                      <option value="Impact">Impact</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1151,6 +1239,30 @@ export default function BulkEmailSender() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {showFullPreview && certPreview && (
+          <div className="bg-slate-800 rounded-xl p-6 mt-4 animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white text-lg font-medium">Certificate Preview</h3>
+              <button
+                onClick={() => setShowFullPreview(false)}
+                className="px-3 py-1.5 bg-slate-700 text-slate-300 text-sm rounded-lg hover:bg-slate-600 transition-colors"
+              >
+                Minimize
+              </button>
+            </div>
+            <div className="flex justify-center bg-slate-900/50 rounded-lg p-6">
+              <img 
+                src={certPreview} 
+                alt="Full Preview" 
+                className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
+              />
+            </div>
+            <p className="text-slate-400 text-sm text-center mt-4">
+              Name: <span className="text-white">{certPreviewName || 'John Doe'}</span> | Position: X={namePosition ? Math.round(namePosition.x) : 'center'}, Y={namePosition ? Math.round(namePosition.y) : 'center'}
+            </p>
           </div>
         )}
       </div>
