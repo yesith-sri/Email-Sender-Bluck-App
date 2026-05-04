@@ -1,13 +1,32 @@
 import { Resend } from 'resend';
 
-const resend = process.env.RESEND_API_KEY 
-  ? new Resend(process.env.RESEND_API_KEY) 
-  : null;
+interface SendEmailRequest {
+  emails: string[];
+  subject: string;
+  html: string;
+  type?: 'invitation' | 'certificate';
+  certificate?: string;
+  recipientName?: string;
+  attachments?: { name: string; data: string }[];
+}
 
-const fromEmail =
-  process.env.RESEND_FROM_EMAIL ||
-  process.env.FROM_EMAIL ||
-  'onboarding@resend.dev';
+interface EmailResult {
+  email: string;
+  success: boolean;
+  error?: string;
+  id?: string;
+}
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
+const resend = (() => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('RESEND_API_KEY not configured');
+    return null;
+  }
+  return new Resend(apiKey);
+})();
 
 function extractBase64(data: string): string {
   if (!data) return '';
@@ -15,83 +34,86 @@ function extractBase64(data: string): string {
   return parts.length > 1 ? parts[1] : data;
 }
 
+async function sendSingleEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  type?: string;
+  certificate?: string;
+  recipientName?: string;
+  attachments?: { name: string; data: string }[];
+}): Promise<{ success: boolean; id?: string; error?: string }> {
+  if (!resend) return { success: false, error: 'Email service not configured' };
+
+  try {
+    const basePayload = {
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    };
+
+    if (params.type === 'certificate' && params.certificate) {
+      const base64Data = extractBase64(params.certificate);
+      if (!base64Data) return { success: false, error: 'Invalid certificate data' };
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      const { data, error } = await resend.emails.send({
+        ...basePayload,
+        attachments: [{
+          filename: `Certificate - ${params.recipientName || 'Recipient'}.png`,
+          content: buffer.toString('base64'),
+        }],
+      });
+
+      return error ? { success: false, error: error.message } : { success: true, id: data?.id };
+    }
+
+    const emailAttachments = params.attachments?.map(att => ({
+      filename: att.name,
+      content: extractBase64(att.data),
+    }));
+
+    const { data, error } = await resend.emails.send({
+      ...basePayload,
+      attachments: emailAttachments?.length ? emailAttachments : undefined,
+    });
+
+    return error ? { success: false, error: error.message } : { success: true, id: data?.id };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to send' };
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const { emails, subject, html, type, certificate, recipientName, attachments } = await request.json();
+    const body: SendEmailRequest = await request.json();
 
-    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+    if (!body.emails?.length || !Array.isArray(body.emails)) {
       return Response.json({ error: 'No emails provided' }, { status: 400 });
     }
 
     if (!resend) {
-      console.error('RESEND_API_KEY is not set');
-      return Response.json({ error: 'RESEND_API_KEY is not configured on server' }, { status: 500 });
+      return Response.json({ error: 'Email service not configured' }, { status: 500 });
     }
 
-    const results = [];
+    const results: EmailResult[] = [];
 
-    for (const email of emails) {
-      try {
-        if (certificate && type === 'certificate') {
-          const base64Data = extractBase64(certificate);
-          if (!base64Data) {
-            results.push({ email, success: false, error: 'Invalid certificate data' });
-            continue;
-          }
-          const buffer = Buffer.from(base64Data, 'base64');
+    for (const email of body.emails) {
+      const result = await sendSingleEmail({
+        to: email,
+        subject: body.subject,
+        html: body.html,
+        type: body.type,
+        certificate: body.certificate,
+        recipientName: body.recipientName,
+        attachments: body.attachments,
+      });
 
-          const { data, error } = await resend.emails.send({
-            from: fromEmail,
-            to: email,
-            subject: subject,
-            html: html,
-            attachments: [
-              {
-                filename: `Certificate - ${recipientName || 'Recipient'}.png`,
-                content: buffer.toString('base64'),
-              },
-            ],
-          });
-
-          if (error) {
-            console.error('Resend certificate error:', error);
-            results.push({ email, success: false, error: error.message });
-          } else {
-            console.log('Certificate sent to', email, 'ID:', data?.id);
-            results.push({ email, success: true, id: data?.id });
-          }
-        } else {
-          const emailAttachments = attachments && attachments.length > 0
-            ? attachments.map((att: { name: string; data: string }) => ({
-                filename: att.name,
-                content: extractBase64(att.data),
-              }))
-            : [];
-
-          const { data, error } = await resend.emails.send({
-            from: fromEmail,
-            to: email,
-            subject: subject,
-            html: html,
-            attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
-          });
-
-          if (error) {
-            console.error('Resend error:', error);
-            results.push({ email, success: false, error: error.message });
-          } else {
-            console.log('Email sent to', email, 'ID:', data?.id);
-            results.push({ email, success: true, id: data?.id });
-          }
-        }
-      } catch (err: any) {
-        console.error('Send error for', email, err);
-        results.push({ email, success: false, error: err.message || 'Failed to send' });
-      }
+      results.push({ email, success: result.success, id: result.id, error: result.error });
     }
 
     return Response.json({ results });
-
   } catch (error: any) {
     console.error('Email send error:', error);
     return Response.json({ error: error.message || 'Failed to send email' }, { status: 500 });
